@@ -6,6 +6,7 @@ import { logger } from './logger.js';
 import { DebugInterface } from './debug.js';
 import { ViewCube } from './view-cube.js';
 import { CameraController } from './camera-controller.js';
+import { ObjectsBrowser } from './objects-browser.js';
 
 // Create renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -90,6 +91,9 @@ render();
 // Initialize debug interface
 const debugInterface = new DebugInterface();
 
+// Create objects browser (but don't pass KIVI yet, we'll set it after)
+let objectsBrowser;
+
 // Global KIVI object to expose all scene objects and utilities
 window.KIVI = {
   version: '0.0.1',
@@ -112,7 +116,8 @@ window.KIVI = {
     gridHelper,
     axesHelper,
     viewCube,
-    cameraController
+    cameraController,
+    objectsBrowser: null  // Will be set below
   },
 
   // Helper methods
@@ -160,6 +165,9 @@ window.KIVI = {
     scene.add(object);
     logger.info('Object added', { name, type: object.type });
     render(); // Re-render after adding
+    if (this.system.objectsBrowser) {
+      this.system.objectsBrowser.update();
+    }
     return object;
   },
 
@@ -171,10 +179,17 @@ window.KIVI = {
       delete this.objects[name];
       logger.info('Object removed', { name });
       render(); // Re-render after removing
+      if (this.system.objectsBrowser) {
+        this.system.objectsBrowser.update();
+      }
     }
     return object;
   }
 };
+
+// Initialize objects browser now that KIVI exists
+objectsBrowser = new ObjectsBrowser(window.KIVI);
+window.KIVI.system.objectsBrowser = objectsBrowser;
 
 // Keep KIVI_DRAFT for backward compatibility
 window.KIVI_DRAFT = window.KIVI;
