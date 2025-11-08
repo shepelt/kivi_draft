@@ -7,6 +7,7 @@ import { DebugInterface } from './debug.js';
 import { ViewCube } from './view-cube.js';
 import { CameraController } from './camera-controller.js';
 import { ObjectsBrowser } from './objects-browser.js';
+import { coordinateSystem } from './coordinate-system.js';
 
 // Create renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -57,9 +58,39 @@ gridHelper.material.opacity = 0.3;
 gridHelper.material.transparent = true;
 scene.add(gridHelper);
 
-// Add axes helper for orientation
-const axesHelper = new THREE.AxesHelper(2);
-scene.add(axesHelper);
+// Add custom axes helper with external coordinate system colors
+// Create a group to hold all three axes
+const axes = new THREE.Group();
+axes.name = 'axes';
+
+// X axis (Red) - pointing right
+const xAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(2, 0, 0)
+]);
+const xAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('X') });
+const xAxis = new THREE.Line(xAxisGeometry, xAxisMaterial);
+axes.add(xAxis);
+
+// Y axis (internal Z) - pointing forward, shows as External Y (Green)
+const yAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(0, 0, 2)
+]);
+const yAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('Y') });
+const yAxis = new THREE.Line(yAxisGeometry, yAxisMaterial);
+axes.add(yAxis);
+
+// Z axis (internal Y) - pointing up, shows as External Z (Blue)
+const zAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(0, 2, 0)
+]);
+const zAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('Z') });
+const zAxis = new THREE.Line(zAxisGeometry, zAxisMaterial);
+axes.add(zAxis);
+
+scene.add(axes);
 
 // Handle window resize
 window.addEventListener('resize', () => {
@@ -107,14 +138,14 @@ window.KIVI = {
 
   // Object registry - all named objects in the scene
   objects: {
-    box
+    box,
+    axes,
+    grid: gridHelper
   },
 
   // System objects (helpers, camera, etc.)
   system: {
     camera,
-    gridHelper,
-    axesHelper,
     viewCube,
     cameraController,
     objectsBrowser: null  // Will be set below

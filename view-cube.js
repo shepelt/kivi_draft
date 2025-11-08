@@ -1,5 +1,6 @@
 // View Cube - Camera position visualizer similar to Fusion 360
 import * as THREE from 'three';
+import { coordinateSystem } from './coordinate-system.js';
 
 export class ViewCube {
   constructor(mainCamera, mainScene) {
@@ -130,9 +131,10 @@ export class ViewCube {
     // In cube coordinates: LEFT=-X, BOTTOM=-Y, FRONT=+Z
     const origin = new THREE.Vector3(-cubeSize/2, -cubeSize/2, cubeSize/2);
 
-    // X axis (Red) - along bottom-front edge, pointing RIGHT
+    // X axis - along bottom-front edge, pointing RIGHT
+    // External X (Red)
     const xGeometry = new THREE.CylinderGeometry(0.015, 0.015, axisLength, 8);
-    const xMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const xMaterial = new THREE.MeshBasicMaterial({ color: coordinateSystem.getAxisColor('X') });
     const xAxis = new THREE.Mesh(xGeometry, xMaterial);
     xAxis.rotation.z = -Math.PI / 2;
     xAxis.position.set(
@@ -142,17 +144,19 @@ export class ViewCube {
     );
     this.scene.add(xAxis);
 
-    // X label (sprite always faces camera) - closer to end
-    this.xLabel = this.createAxisLabel('X',
+    // X label - External X (Red)
+    this.xLabel = this.createAxisLabel(
+      coordinateSystem.getExternalAxisLabel('X'),
       origin.x + axisLength + 0.15,
       origin.y,
       origin.z,
-      0xff0000
+      coordinateSystem.getAxisColor('X')
     );
 
-    // Y axis (Green) - along left-front edge, pointing UP
+    // Y axis (internal) - along left-front edge, pointing UP
+    // This is External Z, so use Blue color
     const yGeometry = new THREE.CylinderGeometry(0.015, 0.015, axisLength, 8);
-    const yMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const yMaterial = new THREE.MeshBasicMaterial({ color: coordinateSystem.getAxisColor('Z') }); // External Z = Blue
     const yAxis = new THREE.Mesh(yGeometry, yMaterial);
     yAxis.position.set(
       origin.x,
@@ -161,17 +165,19 @@ export class ViewCube {
     );
     this.scene.add(yAxis);
 
-    // Y label (sprite always faces camera) - closer to end
-    this.yLabel = this.createAxisLabel('Y',
+    // Y label - Shows as External Z (Blue)
+    this.yLabel = this.createAxisLabel(
+      coordinateSystem.getExternalAxisLabel('Y'),
       origin.x,
       origin.y + axisLength + 0.15,
       origin.z,
-      0x00ff00
+      coordinateSystem.getAxisColor('Z')
     );
 
-    // Z axis (Blue) - along left-bottom edge, pointing BACK (away from viewer)
+    // Z axis (internal) - along left-bottom edge, pointing BACK (away from viewer)
+    // This is External Y, so use Green color
     const zGeometry = new THREE.CylinderGeometry(0.015, 0.015, axisLength, 8);
-    const zMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+    const zMaterial = new THREE.MeshBasicMaterial({ color: coordinateSystem.getAxisColor('Y') }); // External Y = Green
     const zAxis = new THREE.Mesh(zGeometry, zMaterial);
     zAxis.rotation.x = Math.PI / 2;
     zAxis.position.set(
@@ -181,12 +187,13 @@ export class ViewCube {
     );
     this.scene.add(zAxis);
 
-    // Z label (sprite always faces camera) - closer to end
-    this.zLabel = this.createAxisLabel('Z',
+    // Z label - Shows as External Y (Green)
+    this.zLabel = this.createAxisLabel(
+      coordinateSystem.getExternalAxisLabel('Z'),
       origin.x,
       origin.y,
       origin.z - axisLength - 0.15,
-      0x0000ff
+      coordinateSystem.getAxisColor('Y')
     );
   }
 
