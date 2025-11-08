@@ -13,10 +13,14 @@ export class CameraController {
 
     // Mouse state
     this.isRightDragging = false;
+    this.isMiddleDragging = false;
     this.previousMousePosition = { x: 0, y: 0 };
 
     // Rotation speed
     this.rotateSpeed = 0.005;
+
+    // Pan speed
+    this.panSpeed = 0.001;
 
     // Zoom settings
     this.zoomSpeed = 0.1;
@@ -39,6 +43,10 @@ export class CameraController {
       if (e.button === 2) { // Right click
         this.isRightDragging = true;
         this.previousMousePosition = { x: e.clientX, y: e.clientY };
+      } else if (e.button === 1) { // Middle click
+        this.isMiddleDragging = true;
+        this.previousMousePosition = { x: e.clientX, y: e.clientY };
+        e.preventDefault(); // Prevent browser scroll behavior
       }
     });
 
@@ -50,17 +58,27 @@ export class CameraController {
         this.rotateCamera(deltaX, deltaY);
 
         this.previousMousePosition = { x: e.clientX, y: e.clientY };
+      } else if (this.isMiddleDragging) {
+        const deltaX = e.clientX - this.previousMousePosition.x;
+        const deltaY = e.clientY - this.previousMousePosition.y;
+
+        this.panCamera(deltaX, deltaY);
+
+        this.previousMousePosition = { x: e.clientX, y: e.clientY };
       }
     });
 
     this.domElement.addEventListener('mouseup', (e) => {
       if (e.button === 2) {
         this.isRightDragging = false;
+      } else if (e.button === 1) {
+        this.isMiddleDragging = false;
       }
     });
 
     this.domElement.addEventListener('mouseleave', () => {
       this.isRightDragging = false;
+      this.isMiddleDragging = false;
     });
 
     // Wheel event for zooming
@@ -95,6 +113,33 @@ export class CameraController {
     // Update camera position
     this.camera.position.copy(this.target).add(offset);
     this.camera.lookAt(this.target);
+
+    // Trigger render
+    if (this.renderCallback) {
+      this.renderCallback();
+    }
+  }
+
+  panCamera(deltaX, deltaY) {
+    // Pan the camera and target together
+    // We need to move in camera's local space (right and up directions)
+
+    // Get camera's right vector (perpendicular to view direction and up)
+    const viewDir = new THREE.Vector3().subVectors(this.target, this.camera.position).normalize();
+    const right = new THREE.Vector3().crossVectors(viewDir, this.camera.up).normalize();
+    const up = this.camera.up.clone().normalize();
+
+    // Scale pan speed by current zoom level (larger frustum = faster pan)
+    const scaledPanSpeed = this.panSpeed * this.currentZoom;
+
+    // Calculate pan offset
+    const panOffset = new THREE.Vector3();
+    panOffset.add(right.multiplyScalar(-deltaX * scaledPanSpeed)); // Negative for natural direction
+    panOffset.add(up.multiplyScalar(deltaY * scaledPanSpeed));
+
+    // Move both camera and target
+    this.camera.position.add(panOffset);
+    this.target.add(panOffset);
 
     // Trigger render
     if (this.renderCallback) {
