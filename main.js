@@ -8,6 +8,7 @@ import { ViewCube } from './view-cube.js';
 import { CameraController } from './camera-controller.js';
 import { ObjectsBrowser } from './objects-browser.js';
 import { coordinateSystem } from './coordinate-system.js';
+import { SmartGrid } from './smart-grid.js';
 
 // Create renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -52,11 +53,9 @@ const material = new THREE.MeshStandardMaterial({
 const box = new THREE.Mesh(geometry, material);
 scene.add(box);
 
-// Add grid helper for reference
-const gridHelper = new THREE.GridHelper(10, 10);
-gridHelper.material.opacity = 0.3;
-gridHelper.material.transparent = true;
-scene.add(gridHelper);
+// Add smart grid with adaptive labeling (camera will be set after creation)
+const grid = new SmartGrid(camera);
+scene.add(grid);
 
 // Add custom axes helper with external coordinate system colors
 // Create a group to hold all three axes
@@ -68,8 +67,15 @@ const xAxisGeometry = new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0),
   new THREE.Vector3(2, 0, 0)
 ]);
-const xAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('X') });
+const xAxisMaterial = new THREE.LineBasicMaterial({
+  color: coordinateSystem.getAxisColor('X'),
+  transparent: true,
+  opacity: 0.6,
+  depthTest: false,
+  depthWrite: false
+});
 const xAxis = new THREE.Line(xAxisGeometry, xAxisMaterial);
+xAxis.renderOrder = 997;
 axes.add(xAxis);
 
 // Y axis (internal Z) - pointing forward, shows as External Y (Green)
@@ -77,8 +83,15 @@ const yAxisGeometry = new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0),
   new THREE.Vector3(0, 0, 2)
 ]);
-const yAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('Y') });
+const yAxisMaterial = new THREE.LineBasicMaterial({
+  color: coordinateSystem.getAxisColor('Y'),
+  transparent: true,
+  opacity: 0.6,
+  depthTest: false,
+  depthWrite: false
+});
 const yAxis = new THREE.Line(yAxisGeometry, yAxisMaterial);
+yAxis.renderOrder = 997;
 axes.add(yAxis);
 
 // Z axis (internal Y) - pointing up, shows as External Z (Blue)
@@ -86,8 +99,15 @@ const zAxisGeometry = new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0),
   new THREE.Vector3(0, 2, 0)
 ]);
-const zAxisMaterial = new THREE.LineBasicMaterial({ color: coordinateSystem.getAxisColor('Z') });
+const zAxisMaterial = new THREE.LineBasicMaterial({
+  color: coordinateSystem.getAxisColor('Z'),
+  transparent: true,
+  opacity: 0.6,
+  depthTest: false,
+  depthWrite: false
+});
 const zAxis = new THREE.Line(zAxisGeometry, zAxisMaterial);
+zAxis.renderOrder = 997;
 axes.add(zAxis);
 
 scene.add(axes);
@@ -113,8 +133,8 @@ function render() {
   viewCube.render(renderer, window.innerWidth, window.innerHeight);
 }
 
-// Create camera controller
-const cameraController = new CameraController(camera, renderer.domElement, render);
+// Create camera controller (grid will be set after KIVI object is created)
+const cameraController = new CameraController(camera, renderer.domElement, render, grid);
 
 // Initial render
 render();
@@ -140,7 +160,7 @@ window.KIVI = {
   objects: {
     box,
     axes,
-    grid: gridHelper
+    grid
   },
 
   // System objects (helpers, camera, etc.)

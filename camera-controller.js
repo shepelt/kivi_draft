@@ -3,13 +3,18 @@
 import * as THREE from 'three';
 
 export class CameraController {
-  constructor(camera, domElement, renderCallback) {
+  constructor(camera, domElement, renderCallback, grid = null) {
     this.camera = camera;
     this.domElement = domElement;
     this.renderCallback = renderCallback;
+    this.grid = grid;
 
     // Store camera distance from target
     this.radius = this.camera.position.length();
+
+    // Throttle grid updates
+    this.lastGridUpdate = 0;
+    this.gridUpdateInterval = 100; // ms
 
     // Mouse state
     this.isRightDragging = false;
@@ -24,8 +29,8 @@ export class CameraController {
 
     // Zoom settings
     this.zoomSpeed = 0.1;
-    this.minZoom = 0.5;
-    this.maxZoom = 20;
+    this.minZoom = 0.001;  // Very close (millimeter scale)
+    this.maxZoom = 10000;  // Very far (kilometer scale)
     this.currentZoom = 5; // Initial frustum size
 
     // Target point (what camera looks at)
@@ -157,6 +162,13 @@ export class CameraController {
     this.camera.position.copy(this.target).add(offset);
     this.camera.lookAt(this.target);
 
+    // Update grid labels based on new camera position (throttled)
+    const now = Date.now();
+    if (this.grid && this.grid.createGrid && (now - this.lastGridUpdate) > this.gridUpdateInterval) {
+      this.grid.createGrid();
+      this.lastGridUpdate = now;
+    }
+
     // Trigger render
     if (this.renderCallback) {
       this.renderCallback();
@@ -234,6 +246,11 @@ export class CameraController {
     this.camera.top = this.currentZoom / 2;
     this.camera.bottom = this.currentZoom / -2;
     this.camera.updateProjectionMatrix();
+
+    // Update grid spacing if grid is available
+    if (this.grid && this.grid.updateZoom) {
+      this.grid.updateZoom(this.currentZoom);
+    }
 
     // Trigger render
     if (this.renderCallback) {
