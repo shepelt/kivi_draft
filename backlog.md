@@ -59,6 +59,44 @@
 
 **Rationale:** Real engineering constraints create believable sci-fi mechanics
 
+### LLM Integration Strategy
+
+**Primary focus: Assembly assistance (highest value)**
+
+**Why Assembly > Sketching/Extrusion:**
+- Sketching: Humans are already good at drawing shapes, minimal LLM benefit
+- Extrusion: Simple one-parameter operation, no need for LLM
+- Assembly: Most tedious (trial/error positioning), maximum LLM value
+
+**Division of Labor:**
+- LLM: Understand intent, select tools, sequence operations
+- Your code: Precise math, collision detection, geometric reasoning
+- User: Final tweaks, validation
+
+**Approach:**
+1. Build manual assembly tools first (align, snap, joints, constraints)
+2. LLM orchestrates those tools via natural language
+3. Iterative refinement: user feedback → LLM adjusts → tools execute
+
+**Example Workflow:**
+```
+User: "Attach motor shaft to wheel hub"
+LLM: {tool: "alignAxes", part1: "motor_shaft", part2: "wheel_hub"}
+     {tool: "createRevoluteJoint", axis: "Z"}
+Code: Executes alignment + creates joint automatically
+```
+
+**Libraries to Consider:**
+- THREE.CSGMesh for boolean operations (extrude, cut)
+- cassowary.js or kiwi.js for constraint solving (sketches)
+- Graph neural networks for assembly optimization (future/optional)
+
+**Sketch DSL (Optional Future Enhancement):**
+- Define 2D primitives (rectangle, circle, slot, mounting holes)
+- JSON-based intermediate format for combining primitives
+- LLM generates DSL → interpreter renders sketch
+- More tractable than image→sketch conversion
+
 ## Future (v0.1+)
 
 ### Phase 3: 3D Operations
