@@ -6,6 +6,7 @@ export class ObjectsBrowser {
     this.kivi = kiviInstance;
     this.panel = null;
     this.selectedObject = null;
+    this.collapsedFolders = new Set(); // Track which folders are collapsed
 
     this.createPanel();
     this.setupEventListeners();
@@ -81,11 +82,11 @@ export class ObjectsBrowser {
       return;
     }
 
-    // Create list items
-    Object.entries(objects).forEach(([name, object]) => {
-      const item = this.createObjectItem(name, object);
-      this.listContainer.appendChild(item);
-    });
+    // Organize objects into folders
+    const organized = this.organizeObjects(objects);
+
+    // Render folders and objects
+    this.renderFolder(organized, this.listContainer, 0);
 
     // Initialize Lucide icons
     if (window.lucide) {
@@ -93,12 +94,194 @@ export class ObjectsBrowser {
     }
   }
 
-  createObjectItem(name, object) {
+  organizeObjects(objects) {
+    // For now, detect THREE.Group objects as folders
+    // and organize children under them
+    const folders = {};
+    const rootObjects = {};
+
+    Object.entries(objects).forEach(([name, object]) => {
+      if (object.type === 'Group' && object.children && object.children.length > 0) {
+        // This is a folder
+        folders[name] = {
+          object: object,
+          children: {}
+        };
+        // Add children to folder
+        object.children.forEach((child, index) => {
+          const childName = child.name || `${name}_child_${index}`;
+          folders[name].children[childName] = child;
+        });
+      } else {
+        // Root level object
+        rootObjects[name] = object;
+      }
+    });
+
+    return { folders, objects: rootObjects };
+  }
+
+  renderFolder(data, container, depth) {
+    // Render folders first
+    Object.entries(data.folders || {}).forEach(([name, folderData]) => {
+      const folderItem = this.createFolderItem(name, folderData, depth);
+      container.appendChild(folderItem);
+    });
+
+    // Then render objects
+    Object.entries(data.objects || {}).forEach(([name, object]) => {
+      const item = this.createObjectItem(name, object, depth);
+      container.appendChild(item);
+    });
+  }
+
+  createFolderItem(name, folderData, depth) {
+    const folderContainer = document.createElement('div');
+
+    // Folder header
+    const folderHeader = document.createElement('div');
+    folderHeader.className = 'folder-item';
+    folderHeader.dataset.folderName = name;
+    folderHeader.style.cssText = `
+      padding: 8px 12px;
+      padding-left: ${12 + depth * 16}px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+      cursor: pointer;
+      user-select: none;
+    `;
+
+    // Hover effect
+    folderHeader.addEventListener('mouseenter', () => {
+      folderHeader.style.background = '#d0d0d0';
+    });
+    folderHeader.addEventListener('mouseleave', () => {
+      folderHeader.style.background = 'transparent';
+    });
+
+    // Toggle arrow (> or v) - collapsed by default unless explicitly expanded
+    const isCollapsed = !this.collapsedFolders.has(name); // Inverted logic - now tracks expanded folders
+    const arrow = document.createElement('span');
+    arrow.style.cssText = `
+      width: 16px;
+      font-size: 12px;
+      color: #666;
+      flex-shrink: 0;
+    `;
+    arrow.textContent = isCollapsed ? '▶' : '▼';
+
+    // Eye icon for folder visibility
+    const eyeIconContainer = document.createElement('div');
+    eyeIconContainer.style.cssText = `
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    // Check visibility from children
+    let childrenVisible = true;
+    if (folderData.object.children.length > 0) {
+      childrenVisible = folderData.object.children[0].visible;
+    }
+
+    const eyeIcon = document.createElement('i');
+    eyeIcon.setAttribute('data-lucide', childrenVisible ? 'eye' : 'eye-off');
+    eyeIcon.style.cssText = `
+      width: 16px;
+      height: 16px;
+      color: ${childrenVisible ? '#666' : '#ccc'};
+    `;
+    eyeIconContainer.appendChild(eyeIcon);
+
+    eyeIconContainer.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      // Check current visibility state from first child
+      let currentVisibility = true;
+      if (folderData.object.children.length > 0) {
+        currentVisibility = folderData.object.children[0].visible;
+      }
+      const newVisibility = !currentVisibility;
+
+      // Keep the folder Group itself always visible
+      folderData.object.visible = true;
+
+      // Only toggle direct children visibility
+      folderData.object.children.forEach((child) => {
+        child.visible = newVisibility;
+      });
+
+      // Update the folder's tracked state
+      folderData.object.userData = folderData.object.userData || {};
+      folderData.object.userData.childrenVisible = newVisibility;
+
+      const newIcon = document.createElement('i');
+      newIcon.setAttribute('data-lucide', newVisibility ? 'eye' : 'eye-off');
+      newIcon.style.cssText = `
+        width: 16px;
+        height: 16px;
+        color: ${newVisibility ? '#666' : '#ccc'};
+      `;
+      eyeIconContainer.innerHTML = '';
+      eyeIconContainer.appendChild(newIcon);
+      lucide.createIcons();
+      this.kivi.render();
+    });
+
+    // Folder name
+    const nameSpan = document.createElement('span');
+    nameSpan.style.cssText = `
+      font-weight: 500;
+      color: #333;
+    `;
+    nameSpan.textContent = `📁 ${name}`;
+
+    folderHeader.appendChild(arrow);
+    folderHeader.appendChild(eyeIconContainer);
+    folderHeader.appendChild(nameSpan);
+
+    // Toggle collapse on header click
+    folderHeader.addEventListener('click', () => {
+      if (this.collapsedFolders.has(name)) {
+        // Currently expanded, collapse it
+        this.collapsedFolders.delete(name);
+      } else {
+        // Currently collapsed, expand it
+        this.collapsedFolders.add(name);
+      }
+      this.render();
+    });
+
+    folderContainer.appendChild(folderHeader);
+
+    // Children container
+    if (!isCollapsed) {
+      const childrenContainer = document.createElement('div');
+      Object.entries(folderData.children).forEach(([childName, childObject]) => {
+        const childItem = this.createObjectItem(childName, childObject, depth + 1);
+        childrenContainer.appendChild(childItem);
+      });
+      folderContainer.appendChild(childrenContainer);
+    }
+
+    return folderContainer;
+  }
+
+  createObjectItem(name, object, depth = 0) {
     const item = document.createElement('div');
     item.className = 'object-item';
     item.dataset.objectName = name;
     item.style.cssText = `
       padding: 8px 12px;
+      padding-left: ${12 + depth * 16}px;
       border-bottom: 1px solid #ddd;
       display: flex;
       align-items: center;

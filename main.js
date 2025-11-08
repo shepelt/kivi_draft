@@ -57,16 +57,17 @@ const material = new THREE.MeshStandardMaterial({
   metalness: 0.0
 });
 const box = new THREE.Mesh(geometry, material);
-scene.add(box);
+box.visible = true; // Explicitly set visibility
 
 // Add smart grid with adaptive labeling (camera will be set after creation)
 const grid = new SmartGrid(camera);
-scene.add(grid);
+grid.visible = true; // Explicitly set visibility
 
 // Add custom axes helper with external coordinate system colors
 // Create a group to hold all three axes
 const axes = new THREE.Group();
 axes.name = 'axes';
+axes.visible = true; // Explicitly set visibility
 
 // X axis (Red) - pointing right
 const xAxisGeometry = new THREE.BufferGeometry().setFromPoints([
@@ -116,8 +117,6 @@ const zAxis = new THREE.Line(zAxisGeometry, zAxisMaterial);
 zAxis.renderOrder = 997;
 axes.add(zAxis);
 
-scene.add(axes);
-
 // Handle window resize
 window.addEventListener('resize', () => {
   const aspect = window.innerWidth / window.innerHeight;
@@ -151,6 +150,23 @@ const debugInterface = new DebugInterface();
 // Create objects browser (but don't pass KIVI yet, we'll set it after)
 let objectsBrowser;
 
+// Create folder groups for organization
+const systemFolder = new THREE.Group();
+systemFolder.name = 'system';
+systemFolder.visible = true; // Ensure visible
+systemFolder.add(axes);
+systemFolder.add(grid);
+scene.add(systemFolder);
+
+const bodiesFolder = new THREE.Group();
+bodiesFolder.name = 'bodies';
+bodiesFolder.visible = true; // Ensure visible
+bodiesFolder.add(box);
+scene.add(bodiesFolder);
+
+// Render now that objects are added to scene
+render();
+
 // Global KIVI object to expose all scene objects and utilities
 window.KIVI = {
   version: '0.0.1',
@@ -164,9 +180,8 @@ window.KIVI = {
 
   // Object registry - all named objects in the scene
   objects: {
-    box,
-    axes,
-    grid
+    system: systemFolder,
+    bodies: bodiesFolder
   },
 
   // System objects (helpers, camera, etc.)
