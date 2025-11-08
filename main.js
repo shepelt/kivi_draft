@@ -35,20 +35,26 @@ const camera = new THREE.OrthographicCamera(
 camera.position.set(5, 5, 5);
 camera.lookAt(0, 0, 0);
 
-// Add lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+// Add lighting - reduced ambient for better face distinction
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Reduced from 0.6
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+// Main directional light from top-right-front
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Increased from 0.8
 directionalLight.position.set(10, 10, 5);
 scene.add(directionalLight);
+
+// Fill light from opposite side for softer shadows
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+fillLight.position.set(-5, 5, -5);
+scene.add(fillLight);
 
 // Add a box primitive
 const geometry = new THREE.BoxGeometry(1, 1, 1);
 const material = new THREE.MeshStandardMaterial({
-  color: 0x4a90e2,
-  roughness: 0.5,
-  metalness: 0.1
+  color: 0xcccccc, // CAD-like light gray
+  roughness: 0.6,
+  metalness: 0.0
 });
 const box = new THREE.Mesh(geometry, material);
 scene.add(box);
