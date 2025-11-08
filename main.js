@@ -126,6 +126,7 @@ window.addEventListener('resize', () => {
   camera.bottom = frustumSize / -2;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  render(); // Re-render after resize
 });
 
 // Create view cube
