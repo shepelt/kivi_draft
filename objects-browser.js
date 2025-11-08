@@ -20,8 +20,7 @@ export class ObjectsBrowser {
       position: absolute;
       top: 20px;
       left: 20px;
-      width: 200px;
-      max-height: 400px;
+      width: 280px;
       background: rgba(240, 240, 240, 0.9);
       border: 1px solid #ccc;
       border-radius: 4px;
@@ -46,7 +45,6 @@ export class ObjectsBrowser {
     // Create objects list container
     this.listContainer = document.createElement('div');
     this.listContainer.style.cssText = `
-      max-height: 350px;
       overflow-y: auto;
     `;
     this.panel.appendChild(this.listContainer);
@@ -144,7 +142,7 @@ export class ObjectsBrowser {
     folderHeader.dataset.folderName = name;
     folderHeader.style.cssText = `
       padding: 8px 12px;
-      padding-left: ${12 + depth * 16}px;
+      padding-left: ${12 + depth * 32}px;
       border-bottom: 1px solid #ddd;
       display: flex;
       align-items: center;
@@ -167,9 +165,16 @@ export class ObjectsBrowser {
     const arrow = document.createElement('span');
     arrow.style.cssText = `
       width: 16px;
-      font-size: 12px;
+      height: 16px;
+      min-width: 16px;
+      font-size: 9px;
       color: #666;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+      line-height: 1;
     `;
     arrow.textContent = isCollapsed ? '▶' : '▼';
 
@@ -241,6 +246,9 @@ export class ObjectsBrowser {
     nameSpan.style.cssText = `
       font-weight: 500;
       color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     `;
     nameSpan.textContent = `📁 ${name}`;
 
@@ -281,12 +289,13 @@ export class ObjectsBrowser {
     item.dataset.objectName = name;
     item.style.cssText = `
       padding: 8px 12px;
-      padding-left: ${12 + depth * 16}px;
+      padding-left: ${12 + depth * 32}px;
       border-bottom: 1px solid #ddd;
       display: flex;
       align-items: center;
       gap: 8px;
       transition: background 0.2s;
+      white-space: nowrap;
     `;
 
     // Hover effect
@@ -368,6 +377,10 @@ export class ObjectsBrowser {
     nameSpan.style.cssText = `
       font-weight: 500;
       color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex-shrink: 1;
     `;
     nameSpan.textContent = `📦 ${name}`;
     contentContainer.appendChild(nameSpan);
