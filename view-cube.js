@@ -25,6 +25,12 @@ export class ViewCube {
     // Create home button overlay
     this.createHomeButton();
 
+    // Create rotation controls (shown when in snapped view)
+    this.createRotationControls();
+
+    // Track if we're in a snapped orthogonal view
+    this.isInSnappedView = false;
+
     // Setup raycasting for face interaction
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
@@ -262,6 +268,176 @@ export class ViewCube {
     this.setupHomeButtonVisibility();
   }
 
+  createRotationControls() {
+    // Container for rotation controls
+    this.rotationControls = document.createElement('div');
+    this.rotationControls.style.cssText = `
+      position: absolute;
+      display: none;
+      gap: 4px;
+      z-index: 100;
+    `;
+
+    // Counterclockwise rotation button (-90°)
+    this.rotateCCWButton = document.createElement('div');
+    this.rotateCCWButton.style.cssText = `
+      width: 28px;
+      height: 28px;
+      background: rgba(240, 240, 240, 0.9);
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+    this.rotateCCWButton.title = 'Rotate view counterclockwise 90°';
+
+    const ccwIcon = document.createElement('i');
+    ccwIcon.setAttribute('data-lucide', 'rotate-ccw');
+    ccwIcon.style.cssText = `
+      width: 18px;
+      height: 18px;
+      color: #666;
+    `;
+    this.rotateCCWButton.appendChild(ccwIcon);
+
+    // Hover effect
+    this.rotateCCWButton.addEventListener('mouseenter', () => {
+      this.rotateCCWButton.style.background = 'rgba(220, 220, 220, 0.95)';
+    });
+    this.rotateCCWButton.addEventListener('mouseleave', () => {
+      this.rotateCCWButton.style.background = 'rgba(240, 240, 240, 0.9)';
+    });
+
+    // Click to rotate -90°
+    this.rotateCCWButton.addEventListener('click', () => {
+      this.rotateView(-90);
+    });
+
+    // Clockwise rotation button (+90°)
+    this.rotateCWButton = document.createElement('div');
+    this.rotateCWButton.style.cssText = `
+      width: 28px;
+      height: 28px;
+      background: rgba(240, 240, 240, 0.9);
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+    this.rotateCWButton.title = 'Rotate view clockwise 90°';
+
+    const cwIcon = document.createElement('i');
+    cwIcon.setAttribute('data-lucide', 'rotate-cw');
+    cwIcon.style.cssText = `
+      width: 18px;
+      height: 18px;
+      color: #666;
+    `;
+    this.rotateCWButton.appendChild(cwIcon);
+
+    // Hover effect
+    this.rotateCWButton.addEventListener('mouseenter', () => {
+      this.rotateCWButton.style.background = 'rgba(220, 220, 220, 0.95)';
+    });
+    this.rotateCWButton.addEventListener('mouseleave', () => {
+      this.rotateCWButton.style.background = 'rgba(240, 240, 240, 0.9)';
+    });
+
+    // Click to rotate +90°
+    this.rotateCWButton.addEventListener('click', () => {
+      this.rotateView(90);
+    });
+
+    this.rotationControls.appendChild(this.rotateCCWButton);
+    this.rotationControls.appendChild(this.rotateCWButton);
+    document.body.appendChild(this.rotationControls);
+
+    // Initialize Lucide icons
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+  }
+
+  rotateView(degrees) {
+    // Animate rotation around the current viewing axis
+    const angle = (degrees * Math.PI) / 180;
+
+    // Get current view direction (from camera to target)
+    const viewDir = new THREE.Vector3(0, 0, 0).sub(this.mainCamera.position).normalize();
+
+    // Calculate target up vector
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromAxisAngle(viewDir, angle);
+    const targetUp = this.mainCamera.up.clone().applyQuaternion(quaternion).normalize();
+
+    // Animate the rotation
+    const duration = 300; // milliseconds
+    const startTime = Date.now();
+    const startUp = this.mainCamera.up.clone();
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+
+      // Interpolate up vector
+      this.mainCamera.up.lerpVectors(startUp, targetUp, eased);
+      this.mainCamera.up.normalize();
+
+      // Update camera
+      this.mainCamera.lookAt(0, 0, 0);
+
+      // Trigger render
+      if (window.KIVI && window.KIVI.render) {
+        window.KIVI.render();
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    animate();
+  }
+
+  updateRotationControlsVisibility() {
+    // Check if camera is in a snapped orthogonal view
+    const position = this.mainCamera.position.clone().normalize();
+    const up = this.mainCamera.up.clone().normalize();
+
+    // Check if position is close to a cardinal direction
+    const absX = Math.abs(position.x);
+    const absY = Math.abs(position.y);
+    const absZ = Math.abs(position.z);
+    const maxPos = Math.max(absX, absY, absZ);
+    const isOrthoPosition = maxPos > 0.99;
+
+    // Check if up is close to a cardinal direction
+    const absUpX = Math.abs(up.x);
+    const absUpY = Math.abs(up.y);
+    const absUpZ = Math.abs(up.z);
+    const maxUp = Math.max(absUpX, absUpY, absUpZ);
+    const isOrthoUp = maxUp > 0.99;
+
+    this.isInSnappedView = isOrthoPosition && isOrthoUp;
+
+    // Only show if in snapped view AND hovering over cube
+    if (this.isInSnappedView && this.isMouseOverCube && this.viewCubeBounds) {
+      // Position at upper right of view cube
+      this.rotationControls.style.display = 'flex';
+      this.rotationControls.style.left = `${this.viewCubeBounds.x + this.viewCubeBounds.width - 64}px`;
+      this.rotationControls.style.top = `${window.innerHeight - this.viewCubeBounds.y - this.viewCubeBounds.height}px`;
+    } else {
+      this.rotationControls.style.display = 'none';
+    }
+  }
+
   setupFaceInteraction() {
     document.addEventListener('mousemove', (e) => {
       if (!this.viewCubeBounds) return;
@@ -282,6 +458,7 @@ export class ViewCube {
       );
 
       this.updateHomeButtonVisibility();
+      this.updateRotationControlsVisibility();
 
       // If over cube, check which face is being hovered
       if (this.isMouseOverCube) {
@@ -578,6 +755,9 @@ export class ViewCube {
   render(renderer, width, height) {
     // Update cube orientation
     this.update();
+
+    // Update rotation controls visibility
+    this.updateRotationControlsVisibility();
 
     // Save current state
     const currentRenderTarget = renderer.getRenderTarget();
