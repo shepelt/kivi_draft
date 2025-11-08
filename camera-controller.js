@@ -18,6 +18,12 @@ export class CameraController {
     // Rotation speed
     this.rotateSpeed = 0.005;
 
+    // Zoom settings
+    this.zoomSpeed = 0.1;
+    this.minZoom = 0.5;
+    this.maxZoom = 20;
+    this.currentZoom = 5; // Initial frustum size
+
     // Target point (what camera looks at)
     this.target = new THREE.Vector3(0, 0, 0);
 
@@ -56,6 +62,12 @@ export class CameraController {
     this.domElement.addEventListener('mouseleave', () => {
       this.isRightDragging = false;
     });
+
+    // Wheel event for zooming
+    this.domElement.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.zoom(e.deltaY);
+    }, { passive: false });
   }
 
   rotateCamera(deltaX, deltaY) {
@@ -83,6 +95,30 @@ export class CameraController {
     // Update camera position
     this.camera.position.copy(this.target).add(offset);
     this.camera.lookAt(this.target);
+
+    // Trigger render
+    if (this.renderCallback) {
+      this.renderCallback();
+    }
+  }
+
+  zoom(deltaY) {
+    // Adjust zoom level based on scroll direction
+    // deltaY > 0 = scroll down = zoom in
+    // deltaY < 0 = scroll up = zoom out
+    const zoomFactor = deltaY > 0 ? 1 - this.zoomSpeed : 1 + this.zoomSpeed;
+    this.currentZoom *= zoomFactor;
+
+    // Clamp zoom
+    this.currentZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoom));
+
+    // Update camera frustum
+    const aspect = this.camera.right / this.camera.top; // Calculate current aspect ratio
+    this.camera.left = this.currentZoom * aspect / -2;
+    this.camera.right = this.currentZoom * aspect / 2;
+    this.camera.top = this.currentZoom / 2;
+    this.camera.bottom = this.currentZoom / -2;
+    this.camera.updateProjectionMatrix();
 
     // Trigger render
     if (this.renderCallback) {

@@ -27,7 +27,7 @@ export class ObjectsBrowser {
       font-family: Arial, sans-serif;
       font-size: 12px;
       overflow: hidden;
-      z-index: 1000;
+      z-index: 10;
     `;
 
     // Create header

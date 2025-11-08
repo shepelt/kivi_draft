@@ -260,6 +260,9 @@ export class ViewCube {
     renderer.setScissorTest(true);
     renderer.autoClear = false;
 
+    // Clear depth buffer in the view cube area so it always renders on top
+    renderer.clearDepth();
+
     // Render the view cube
     renderer.render(this.scene, this.camera);
 
