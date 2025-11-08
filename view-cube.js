@@ -293,16 +293,8 @@ export class ViewCube {
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const intersects = this.raycaster.intersectObject(this.cube);
 
-        console.log('Raycasting:', {
-          mouse: { x: this.mouse.x, y: this.mouse.y },
-          intersects: intersects.length,
-          cubeVisible: this.cube.visible,
-          materials: this.cube.material.length
-        });
-
         if (intersects.length > 0) {
           const faceIndex = Math.floor(intersects[0].faceIndex / 2); // Each face has 2 triangles
-          console.log('Face index:', faceIndex, 'Name:', this.faceData[faceIndex].name);
           this.setHoveredFace(faceIndex);
         } else {
           this.setHoveredFace(null);
