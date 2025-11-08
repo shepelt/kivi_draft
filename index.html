@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KIVI Draft - Box Test</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/node_modules/three/build/three.module.js"
+      }
+    }
+  </script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module">
+    // Make socket.io available globally for modules
+    window.io = io;
+  </script>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
