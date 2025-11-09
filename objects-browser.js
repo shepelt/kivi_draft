@@ -467,6 +467,9 @@ export class ObjectsBrowser {
     // Check if this is a system folder or system item
     const isSystemItem = object.name === 'system' || parentFolder === 'system';
 
+    // Check if this is a protected folder (system, bodies, sketches)
+    const isProtectedFolder = isFolder && (object.name === 'system' || object.name === 'bodies' || object.name === 'sketches');
+
     // Create menu items
     const menuItems = [];
 
@@ -514,8 +517,8 @@ export class ObjectsBrowser {
       });
     }
 
-    // Only add Delete and Rename for non-system items
-    if (!isSystemItem) {
+    // Only add Delete and Rename for non-system items and non-protected folders
+    if (!isSystemItem && !isProtectedFolder) {
       menuItems.push({
         label: 'Delete',
         action: () => {
@@ -550,8 +553,8 @@ export class ObjectsBrowser {
       }
     });
 
-    // Only add Rename for non-system items
-    if (!isSystemItem) {
+    // Only add Rename for non-system items and non-protected folders
+    if (!isSystemItem && !isProtectedFolder) {
       menuItems.push({
         label: 'Rename',
         action: () => {
@@ -571,24 +574,64 @@ export class ObjectsBrowser {
       });
     }
 
+    // Add "Create Sketch" for sketches folder (disabled if sketch editor is active)
+    if (isFolder && object.name === 'sketches') {
+      const isEditing = this.kivi.system.sketchEditor?.isEditing;
+      menuItems.push({
+        label: 'Create Sketch',
+        disabled: isEditing,
+        action: () => {
+          // Create a new sketch using the sketch editor
+          if (this.kivi.system.sketchEditor && !isEditing) {
+            this.kivi.system.sketchEditor.createSketch();
+          }
+          this.hideContextMenu();
+        }
+      });
+    }
+
+    // Add "Edit Sketch" for sketch objects (disabled if already editing)
+    if (!isFolder && object.userData?.kivi?.type === 'sketch') {
+      const isEditing = this.kivi.system.sketchEditor?.isEditing;
+      menuItems.push({
+        label: 'Edit Sketch',
+        disabled: isEditing,
+        action: () => {
+          // Edit existing sketch
+          if (this.kivi.system.sketchEditor && !isEditing) {
+            this.kivi.system.sketchEditor.openSketchEditor(object);
+          }
+          this.hideContextMenu();
+        }
+      });
+    }
+
     menuItems.forEach(item => {
       const menuItem = document.createElement('div');
       menuItem.textContent = item.label;
+
+      const isDisabled = item.disabled || false;
       menuItem.style.cssText = `
         padding: 6px 12px;
-        cursor: pointer;
+        cursor: ${isDisabled ? 'not-allowed' : 'pointer'};
         transition: background 0.2s;
+        opacity: ${isDisabled ? '0.5' : '1'};
+        color: ${isDisabled ? '#999' : '#000'};
       `;
-      menuItem.addEventListener('mouseenter', () => {
-        menuItem.style.background = '#f0f0f0';
-      });
-      menuItem.addEventListener('mouseleave', () => {
-        menuItem.style.background = 'transparent';
-      });
-      menuItem.addEventListener('click', (e) => {
-        e.stopPropagation();
-        item.action();
-      });
+
+      if (!isDisabled) {
+        menuItem.addEventListener('mouseenter', () => {
+          menuItem.style.background = '#f0f0f0';
+        });
+        menuItem.addEventListener('mouseleave', () => {
+          menuItem.style.background = 'transparent';
+        });
+        menuItem.addEventListener('click', (e) => {
+          e.stopPropagation();
+          item.action();
+        });
+      }
+
       this.contextMenu.appendChild(menuItem);
     });
 

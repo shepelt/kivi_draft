@@ -9,6 +9,9 @@ import { CameraController } from './camera-controller.js';
 import { ObjectsBrowser } from './objects-browser.js';
 import { coordinateSystem } from './coordinate-system.js';
 import { SmartGrid } from './smart-grid.js';
+import { SketchEditor } from './sketch-editor.js';
+import { FaceSelector } from './face-selector.js';
+import { Plane } from './plane.js';
 
 // Create renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -49,16 +52,6 @@ const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
 fillLight.position.set(-5, 5, -5);
 scene.add(fillLight);
 
-// Add a box primitive
-const geometry = new THREE.BoxGeometry(1, 1, 1);
-const material = new THREE.MeshStandardMaterial({
-  color: 0xcccccc, // CAD-like light gray
-  roughness: 0.6,
-  metalness: 0.0
-});
-const box = new THREE.Mesh(geometry, material);
-box.visible = true; // Explicitly set visibility
-
 // Add smart grid with adaptive labeling (camera will be set after creation)
 const grid = new SmartGrid(camera);
 grid.visible = true; // Explicitly set visibility
@@ -85,10 +78,10 @@ const xAxis = new THREE.Line(xAxisGeometry, xAxisMaterial);
 xAxis.renderOrder = 997;
 axes.add(xAxis);
 
-// Y axis (internal Z) - pointing forward, shows as External Y (Green)
+// Y axis (internal Z) - pointing backward, shows as External Y (Green)
 const yAxisGeometry = new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0),
-  new THREE.Vector3(0, 0, 2)
+  new THREE.Vector3(0, 0, -2) // Point in -Z direction to match view cube
 ]);
 const yAxisMaterial = new THREE.LineBasicMaterial({
   color: coordinateSystem.getAxisColor('Y'),
@@ -162,8 +155,12 @@ scene.add(systemFolder);
 const bodiesFolder = new THREE.Group();
 bodiesFolder.name = 'bodies';
 bodiesFolder.visible = true; // Ensure visible
-bodiesFolder.add(box);
 scene.add(bodiesFolder);
+
+const sketchesFolder = new THREE.Group();
+sketchesFolder.name = 'sketches';
+sketchesFolder.visible = true; // Ensure visible
+scene.add(sketchesFolder);
 
 // Render now that objects are added to scene
 render();
@@ -177,12 +174,14 @@ window.KIVI = {
   logger,
   debug: debugInterface,
   THREE,
+  Plane, // Expose Plane class for sketch creation
   render, // Expose render function for manual updates
 
   // Object registry - all named objects in the scene
   objects: {
     system: systemFolder,
-    bodies: bodiesFolder
+    bodies: bodiesFolder,
+    sketches: sketchesFolder
   },
 
   // System objects (helpers, camera, etc.)
@@ -190,7 +189,8 @@ window.KIVI = {
     camera,
     viewCube,
     cameraController,
-    objectsBrowser: null  // Will be set below
+    objectsBrowser: null,  // Will be set below
+    sketchEditor: null  // Will be set below
   },
 
   // Helper methods
@@ -263,6 +263,14 @@ window.KIVI = {
 // Initialize objects browser now that KIVI exists
 objectsBrowser = new ObjectsBrowser(window.KIVI);
 window.KIVI.system.objectsBrowser = objectsBrowser;
+
+// Initialize sketch editor
+const sketchEditor = new SketchEditor(window.KIVI);
+window.KIVI.system.sketchEditor = sketchEditor;
+
+// Initialize face selector
+const faceSelector = new FaceSelector(camera, renderer.domElement, scene, render);
+window.KIVI.system.faceSelector = faceSelector;
 
 // Keep KIVI_DRAFT for backward compatibility
 window.KIVI_DRAFT = window.KIVI;

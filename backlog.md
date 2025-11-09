@@ -17,14 +17,20 @@
 
 ## In Progress
 
+- TASK-10: Basic extrusion editor (box primitives only)
+
 ## Next Up (v0.0.2)
 
-- TASK-10: 2D sketch editor on selected plane/face
-- TASK-11: Sketch data structure (entities, constraints, parameters)
-- TASK-12: Line tool
-- TASK-13: Arc tool
-- TASK-14: Circle tool
-- TASK-15: Basic sketch constraints (horizontal, vertical, coincident)
+- TASK-11: Feature history system (store extrude operations in userData)
+- TASK-12: Basic cut operation (CSG subtract)
+- TASK-13: Extrusion UI (depth parameter, direction)
+- TASK-14: 2D sketch editor on selected plane/face
+- TASK-15: Sketch data structure (entities, constraints, parameters)
+- TASK-16: Line tool
+- TASK-17: Arc tool
+- TASK-18: Circle tool
+- TASK-19: Basic sketch constraints (horizontal, vertical, coincident)
+- TASK-20: Connect sketch editor to extrusion (replace box primitives)
 
 ## Ideas & Architecture Decisions
 
@@ -100,23 +106,22 @@ Code: Executes alignment + creates joint automatically
 ## Future (v0.1+)
 
 ### Phase 3: 3D Operations
-- TASK-16: Extrude operation (add material)
-- TASK-17: Cut operation (subtract material via extrude/revolve)
-- TASK-18: Revolve operation (axial symmetry)
-- TASK-19: Blend operation (fillets/chamfers)
+- Revolve operation (axial symmetry)
+- Blend operation (fillets/chamfers)
+- Advanced extrusion (taper, draft angle)
 
 ### Phase 4: Advanced
-- TASK-20: Pattern (linear, circular)
-- TASK-21: Mirror
-- TASK-22: Shell (hollow out parts)
-- TASK-23: Assembly constraints (mates)
-- TASK-24: Joint definitions (revolute, prismatic, fixed)
+- Pattern (linear, circular)
+- Mirror
+- Shell (hollow out parts)
+- Assembly constraints (mates)
+- Joint definitions (revolute, prismatic, fixed)
 
 ### Phase 5: Export & Simulation
-- TASK-25: STL export (3D printing)
-- TASK-26: STEP export (CAD interchange)
-- TASK-27: Motion simulation (kinematics)
-- TASK-28: Basic collision detection
+- STL export (3D printing)
+- STEP export (CAD interchange)
+- Motion simulation (kinematics)
+- Basic collision detection
 
 ## Technical Debt & Improvements
 

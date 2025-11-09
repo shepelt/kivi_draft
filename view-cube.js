@@ -750,10 +750,11 @@ export class ViewCube {
     // Point the view cube camera in the same direction (further back for zoom out)
     this.camera.position.copy(direction).multiplyScalar(7);
 
-    // Copy the main camera's up vector to match its orientation
-    this.camera.up.copy(this.mainCamera.up);
+    // Copy the main camera's up vector to match its orientation (and normalize it)
+    this.camera.up.copy(this.mainCamera.up).normalize();
 
     this.camera.lookAt(0, 0, 0);
+    this.camera.updateMatrixWorld();
 
     // Update edges to match cube orientation (edges don't rotate, they're part of the scene)
     // Note: edges are already children of the scene, so they don't need manual rotation

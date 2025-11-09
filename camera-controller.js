@@ -8,6 +8,8 @@ export class CameraController {
     this.domElement = domElement;
     this.renderCallback = renderCallback;
     this.grid = grid;
+    this.enabled = true; // Can be disabled to prevent camera control
+    this.rotationEnabled = true; // Can disable rotation separately
 
     // Store camera distance from target
     this.radius = this.camera.position.length();
@@ -45,9 +47,12 @@ export class CameraController {
     });
 
     this.domElement.addEventListener('mousedown', (e) => {
+      if (!this.enabled) return;
       if (e.button === 2) { // Right click
-        this.isRightDragging = true;
-        this.previousMousePosition = { x: e.clientX, y: e.clientY };
+        if (this.rotationEnabled) {
+          this.isRightDragging = true;
+          this.previousMousePosition = { x: e.clientX, y: e.clientY };
+        }
       } else if (e.button === 1) { // Middle click
         this.isMiddleDragging = true;
         this.previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -56,7 +61,8 @@ export class CameraController {
     });
 
     this.domElement.addEventListener('mousemove', (e) => {
-      if (this.isRightDragging) {
+      if (!this.enabled) return;
+      if (this.isRightDragging && this.rotationEnabled) {
         const deltaX = e.clientX - this.previousMousePosition.x;
         const deltaY = e.clientY - this.previousMousePosition.y;
 
@@ -88,6 +94,7 @@ export class CameraController {
 
     // Wheel event for zooming
     this.domElement.addEventListener('wheel', (e) => {
+      if (!this.enabled) return;
       e.preventDefault();
       this.zoom(e.deltaY);
     }, { passive: false });
