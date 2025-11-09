@@ -783,4 +783,81 @@ export class ObjectsBrowser {
       document.body.removeChild(backdrop);
     });
   }
+
+  showExtrudeBodyFaceDialog(bodyMesh, faceIndex) {
+    // Create modal dialog for body face extrude parameters
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 10000;
+      min-width: 300px;
+    `;
+
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600;">Extrude Body Face</h3>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 4px; font-size: 13px;">Distance:</label>
+        <input type="number" id="extrude-distance" value="5" step="0.5" min="0.1"
+          style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 4px; font-size: 13px;">Direction:</label>
+        <select id="extrude-direction" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+          <option value="1">Normal (outward)</option>
+          <option value="-1">Reverse (inward)</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button id="extrude-ok" class="btn btn-primary" style="flex: 1;">OK</button>
+        <button id="extrude-cancel" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+      </div>
+    `;
+
+    // Create backdrop
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.3);
+      z-index: 9999;
+    `;
+
+    document.body.appendChild(backdrop);
+    document.body.appendChild(dialog);
+
+    // Handle OK button
+    dialog.querySelector('#extrude-ok').addEventListener('click', () => {
+      const distance = parseFloat(dialog.querySelector('#extrude-distance').value);
+      const direction = parseInt(dialog.querySelector('#extrude-direction').value);
+
+      // Perform body face extrude
+      this.kivi.system.sketchEditor.extrudeBodyFace(bodyMesh, faceIndex, distance, direction);
+
+      // Close dialog
+      document.body.removeChild(dialog);
+      document.body.removeChild(backdrop);
+    });
+
+    // Handle Cancel button
+    dialog.querySelector('#extrude-cancel').addEventListener('click', () => {
+      document.body.removeChild(dialog);
+      document.body.removeChild(backdrop);
+    });
+
+    // Close on backdrop click
+    backdrop.addEventListener('click', () => {
+      document.body.removeChild(dialog);
+      document.body.removeChild(backdrop);
+    });
+  }
 }

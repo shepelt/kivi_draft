@@ -643,4 +643,212 @@ export class SketchEditor {
 
     return name;
   }
+
+  // Extrude a body face to create a new body
+  // Can accept either groupIndex (will recalculate) or faceGroup directly (uses stored selection)
+  extrudeBodyFace(bodyMesh, groupIndexOrFaceGroup, distance = 5, direction = 1) {
+    if (!bodyMesh) {
+      console.error('Invalid body for extrusion');
+      return null;
+    }
+
+    let group;
+
+    // Check if we received a face group object or just an index
+    if (typeof groupIndexOrFaceGroup === 'object' && groupIndexOrFaceGroup.faceIndices) {
+      // We received the actual face group data - use it directly!
+      group = groupIndexOrFaceGroup;
+      console.log('Using stored face group with', group.faceIndices.length, 'triangles');
+    } else {
+      // We received an index - need to recalculate
+      const groupIndex = groupIndexOrFaceGroup;
+      if (groupIndex === null || groupIndex === undefined) {
+        console.error('Invalid group index for extrusion');
+        return null;
+      }
+
+      const faceSelector = this.kivi.system.faceSelector;
+      if (!faceSelector) {
+        console.error('Face selector not available');
+        return null;
+      }
+
+      const faceGroups = faceSelector.buildFaceGroups(bodyMesh);
+      group = faceGroups.groups[groupIndex];
+
+      if (!group || !group.faceIndices || group.faceIndices.length === 0) {
+        console.error('Invalid face group');
+        return null;
+      }
+    }
+
+    const geometry = bodyMesh.geometry;
+    const position = geometry.attributes.position;
+
+    // Get the first triangle to determine normal and coordinate system
+    const firstFaceIndex = group.faceIndices[0];
+    const i1 = firstFaceIndex * 3;
+    const i2 = firstFaceIndex * 3 + 1;
+    const i3 = firstFaceIndex * 3 + 2;
+
+    const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+    const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+    const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+    // Calculate face normal
+    const edge1 = new THREE.Vector3().subVectors(v2, v1);
+    const edge2 = new THREE.Vector3().subVectors(v3, v1);
+    const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+    // Transform to world space
+    const worldNormal = normal.clone().transformDirection(bodyMesh.matrixWorld);
+
+    // Extract perimeter edges from the face group (same logic as in face-selector.js)
+    const vertexKey = (v) => `${v.x.toFixed(6)}_${v.y.toFixed(6)}_${v.z.toFixed(6)}`;
+    const edgeMap = new Map();
+
+    group.faceIndices.forEach(faceIndex => {
+      const i1 = faceIndex * 3;
+      const i2 = faceIndex * 3 + 1;
+      const i3 = faceIndex * 3 + 2;
+
+      const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+      const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+      const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+      const edges = [[v1, v2], [v2, v3], [v3, v1]];
+
+      edges.forEach(([va, vb]) => {
+        const keyA = vertexKey(va);
+        const keyB = vertexKey(vb);
+        const edgeKey = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+        edgeMap.set(edgeKey, (edgeMap.get(edgeKey) || 0) + 1);
+      });
+    });
+
+    // Get perimeter edges (appear only once)
+    const perimeterVertices = [];
+    const vertexCache = new Map();
+
+    const getVertex = (key) => {
+      if (!vertexCache.has(key)) {
+        const [x, y, z] = key.split('_').map(parseFloat);
+        vertexCache.set(key, new THREE.Vector3(x, y, z));
+      }
+      return vertexCache.get(key);
+    };
+
+    // Collect perimeter edges and build an ordered loop
+    const perimeterEdges = [];
+    edgeMap.forEach((count, edgeKey) => {
+      if (count === 1) {
+        const [keyA, keyB] = edgeKey.split('|');
+        perimeterEdges.push([getVertex(keyA), getVertex(keyB)]);
+      }
+    });
+
+    // Order the perimeter edges to form a continuous loop
+    const orderedVertices = [perimeterEdges[0][0]];
+    let currentVertex = perimeterEdges[0][1];
+    const usedEdges = new Set([0]);
+
+    while (orderedVertices.length < perimeterEdges.length) {
+      orderedVertices.push(currentVertex);
+
+      // Find next edge that starts with currentVertex
+      let found = false;
+      for (let i = 0; i < perimeterEdges.length; i++) {
+        if (usedEdges.has(i)) continue;
+
+        const [a, b] = perimeterEdges[i];
+        if (a.distanceTo(currentVertex) < 0.0001) {
+          currentVertex = b;
+          usedEdges.add(i);
+          found = true;
+          break;
+        } else if (b.distanceTo(currentVertex) < 0.0001) {
+          currentVertex = a;
+          usedEdges.add(i);
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) break;
+    }
+
+    // Create local coordinate system for the face
+    const uAxis = edge1.clone().normalize();
+    const vAxis = new THREE.Vector3().crossVectors(normal, uAxis).normalize();
+    const origin = v1.clone();
+
+    // Project perimeter vertices onto the 2D plane
+    const shape = new THREE.Shape();
+    orderedVertices.forEach((vertex, i) => {
+      const localPos = vertex.clone().sub(origin);
+      const u = localPos.dot(uAxis);
+      const v = localPos.dot(vAxis);
+
+      if (i === 0) {
+        shape.moveTo(u, v);
+      } else {
+        shape.lineTo(u, v);
+      }
+    });
+
+    // Extrude settings
+    const extrudeSettings = {
+      depth: distance * direction,
+      bevelEnabled: false
+    };
+
+    // Create extruded geometry
+    const extrudedGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+    // Transform to world space
+    const matrix = new THREE.Matrix4();
+    const worldOrigin = origin.clone().applyMatrix4(bodyMesh.matrixWorld);
+    const worldUAxis = uAxis.clone().transformDirection(bodyMesh.matrixWorld).normalize();
+    const worldVAxis = vAxis.clone().transformDirection(bodyMesh.matrixWorld).normalize();
+
+    matrix.makeBasis(worldUAxis, worldVAxis, worldNormal);
+    matrix.setPosition(worldOrigin);
+
+    extrudedGeometry.applyMatrix4(matrix);
+
+    // Create mesh
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xcccccc,
+      roughness: 0.5,
+      metalness: 0.1
+    });
+
+    const mesh = new THREE.Mesh(extrudedGeometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    // Generate unique name
+    const bodyName = this.generateBodyName();
+    mesh.name = bodyName;
+
+    // Store metadata
+    mesh.userData.kivi = {
+      type: 'extrude_from_face',
+      sourceBody: bodyMesh.name,
+      sourceFaceGroup: group, // Store the complete face group data
+      distance: distance,
+      direction: direction
+    };
+
+    // Add to bodies folder
+    this.kivi.objects.bodies.add(mesh);
+
+    // Update objects browser and render
+    this.kivi.system.objectsBrowser.update();
+    this.kivi.render();
+
+    console.log('Extruded body face:', bodyMesh.name, 'with', group.faceIndices.length, 'triangles →', bodyName, 'distance:', distance);
+
+    return mesh;
+  }
 }

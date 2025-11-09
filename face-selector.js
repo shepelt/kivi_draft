@@ -16,10 +16,14 @@ export class FaceSelector {
     // State
     this.hoveredFace = null;
     this.selectedFace = null;
+    this.selectedFaceGroup = null; // Store the complete face group data
 
     // Highlight meshes
     this.hoverHighlight = null;
     this.selectionHighlight = null;
+
+    // Cache for unified face groups (maps mesh UUID to face groups)
+    this.faceGroupsCache = new Map();
 
     this.setupEventListeners();
   }
@@ -28,6 +32,110 @@ export class FaceSelector {
     this.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
     this.domElement.addEventListener('click', (e) => this.onClick(e));
     this.domElement.addEventListener('contextmenu', (e) => this.onContextMenu(e));
+  }
+
+  // Build unified face groups for a mesh (group coplanar AND adjacent triangles)
+  buildFaceGroups(mesh) {
+    // Check cache first
+    if (this.faceGroupsCache.has(mesh.uuid)) {
+      return this.faceGroupsCache.get(mesh.uuid);
+    }
+
+    const geometry = mesh.geometry;
+    const position = geometry.attributes.position;
+    const faceCount = position.count / 3;
+    const groups = [];
+    const processed = new Set();
+    const ANGLE_THRESHOLD = 0.9999; // ~0.8 degrees - faces must be nearly coplanar
+    const VERTEX_THRESHOLD = 0.0001; // Vertices must be very close to be considered shared
+
+    // Helper to get face normal
+    const getFaceNormal = (faceIndex) => {
+      const i1 = faceIndex * 3;
+      const i2 = faceIndex * 3 + 1;
+      const i3 = faceIndex * 3 + 2;
+
+      const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+      const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+      const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+      const edge1 = new THREE.Vector3().subVectors(v2, v1);
+      const edge2 = new THREE.Vector3().subVectors(v3, v1);
+      return new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+    };
+
+    // Helper to get face vertices
+    const getFaceVertices = (faceIndex) => {
+      const i1 = faceIndex * 3;
+      const i2 = faceIndex * 3 + 1;
+      const i3 = faceIndex * 3 + 2;
+
+      return [
+        new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1)),
+        new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2)),
+        new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3))
+      ];
+    };
+
+    // Helper to check if two faces share an edge (at least 2 vertices)
+    const facesShareEdge = (face1Verts, face2Verts) => {
+      let sharedCount = 0;
+      for (const v1 of face1Verts) {
+        for (const v2 of face2Verts) {
+          if (v1.distanceTo(v2) < VERTEX_THRESHOLD) {
+            sharedCount++;
+            break;
+          }
+        }
+      }
+      return sharedCount >= 2; // Share at least 2 vertices (an edge)
+    };
+
+    // Build groups using flood fill with adjacency check
+    for (let faceIndex = 0; faceIndex < faceCount; faceIndex++) {
+      if (processed.has(faceIndex)) continue;
+
+      const group = { faceIndices: [faceIndex] };
+      const queue = [faceIndex];
+      const normal = getFaceNormal(faceIndex);
+      processed.add(faceIndex);
+
+      while (queue.length > 0) {
+        const currentFace = queue.shift();
+        const currentVerts = getFaceVertices(currentFace);
+
+        // Check all other unprocessed faces
+        for (let otherFace = 0; otherFace < faceCount; otherFace++) {
+          if (processed.has(otherFace)) continue;
+
+          const otherNormal = getFaceNormal(otherFace);
+          const otherVerts = getFaceVertices(otherFace);
+
+          // Check if normals are parallel (coplanar) AND faces share an edge
+          if (Math.abs(normal.dot(otherNormal)) > ANGLE_THRESHOLD &&
+              facesShareEdge(currentVerts, otherVerts)) {
+            // Add to group
+            group.faceIndices.push(otherFace);
+            queue.push(otherFace);
+            processed.add(otherFace);
+          }
+        }
+      }
+
+      groups.push(group);
+    }
+
+    // Create reverse lookup: faceIndex -> group
+    const faceToGroup = new Map();
+    groups.forEach((group, groupIndex) => {
+      group.faceIndices.forEach(faceIndex => {
+        faceToGroup.set(faceIndex, groupIndex);
+      });
+    });
+
+    const result = { groups, faceToGroup };
+    this.faceGroupsCache.set(mesh.uuid, result);
+    return result;
   }
 
   onMouseMove(event) {
@@ -48,11 +156,58 @@ export class FaceSelector {
     const intersects = this.raycaster.intersectObjects(sketchFaces, false);
 
     if (intersects.length > 0) {
-      const face = intersects[0].object;
+      const intersection = intersects[0];
+      const face = intersection.object;
+      const faceIndex = intersection.faceIndex;
+
+      // For 3D bodies, check if face is front-facing (backface culling)
+      if (!face.userData.sketchFace) {
+        // Get face normal
+        const geometry = face.geometry;
+        const position = geometry.attributes.position;
+
+        const i1 = faceIndex * 3;
+        const i2 = faceIndex * 3 + 1;
+        const i3 = faceIndex * 3 + 2;
+
+        const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+        const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+        const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+        // Calculate face normal in local space
+        const edge1 = new THREE.Vector3().subVectors(v2, v1);
+        const edge2 = new THREE.Vector3().subVectors(v3, v1);
+        const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+        // Transform normal to world space
+        const worldNormal = normal.clone().transformDirection(face.matrixWorld);
+
+        // Get view direction (from face to camera)
+        const faceWorldPos = intersection.point;
+        const viewDir = new THREE.Vector3().subVectors(this.camera.position, faceWorldPos).normalize();
+
+        // Check if face is front-facing (normal points toward camera)
+        const dotProduct = worldNormal.dot(viewDir);
+
+        if (dotProduct < 0) {
+          // Face is back-facing, ignore it
+          if (this.hoveredFace) {
+            this.clearHover();
+          }
+          return;
+        }
+      }
+
+      // For 3D bodies, find the unified face group
+      let unifiedFaceId = faceIndex;
+      if (!face.userData.sketchFace) {
+        const faceGroups = this.buildFaceGroups(face);
+        unifiedFaceId = faceGroups.faceToGroup.get(faceIndex);
+      }
 
       // Only update if we're hovering a different face
-      if (this.hoveredFace !== face) {
-        this.setHoveredFace(face);
+      if (this.hoveredFace !== face || this.hoveredFaceIndex !== unifiedFaceId) {
+        this.setHoveredFace(face, unifiedFaceId);
       }
     } else {
       // No intersection, clear hover
@@ -69,8 +224,8 @@ export class FaceSelector {
     if (event.button !== 0) return;
 
     if (this.hoveredFace) {
-      // Click on a face - select it
-      this.selectFace(this.hoveredFace);
+      // Click on a face - select it with the face index
+      this.selectFace(this.hoveredFace, this.hoveredFaceIndex);
     } else {
       // Click on empty space - deselect
       this.deselectFace();
@@ -104,15 +259,20 @@ export class FaceSelector {
     return faces;
   }
 
-  setHoveredFace(face) {
+  setHoveredFace(face, faceIndex = null) {
     // Clear previous hover
     this.clearHover();
 
     this.hoveredFace = face;
-    console.log('Face hovered:', face.name || 'unnamed');
+    this.hoveredFaceIndex = faceIndex;
+
+    const faceDesc = face.userData.sketchFace ?
+      (face.name || 'sketch face') :
+      `${face.name || 'body'} face ${faceIndex}`;
+    console.log('Face hovered:', faceDesc);
 
     // Create dark edge highlight
-    this.createHoverHighlight(face);
+    this.createHoverHighlight(face, faceIndex);
 
     if (this.renderCallback) {
       this.renderCallback();
@@ -136,23 +296,36 @@ export class FaceSelector {
     }
   }
 
-  selectFace(face) {
-    // If clicking the same face, ignore (already selected)
-    if (this.selectedFace === face) {
+  selectFace(face, faceIndex = null) {
+    // If clicking the same face (same object and face index), ignore
+    if (this.selectedFace === face && this.selectedFaceIndex === faceIndex) {
       console.log('Face already selected, ignoring');
       return;
     }
 
     // Deselect previous if different
-    if (this.selectedFace && this.selectedFace !== face) {
+    if (this.selectedFace) {
       this.deselectFace();
     }
 
     this.selectedFace = face;
-    console.log('Face selected:', face.name || 'unnamed');
+    this.selectedFaceIndex = faceIndex;
+
+    // Store the complete face group data for body faces
+    if (!face.userData.sketchFace) {
+      const faceGroups = this.buildFaceGroups(face);
+      this.selectedFaceGroup = faceGroups.groups[faceIndex];
+    } else {
+      this.selectedFaceGroup = null; // Sketch faces don't need face groups
+    }
+
+    const faceDesc = face.userData.sketchFace ?
+      (face.name || 'sketch face') :
+      `${face.name || 'body'} face ${faceIndex}`;
+    console.log('Face selected:', faceDesc);
 
     // Create blue face highlight
-    this.createSelectionHighlight(face);
+    this.createSelectionHighlight(face, faceIndex);
 
     if (this.renderCallback) {
       this.renderCallback();
@@ -163,6 +336,8 @@ export class FaceSelector {
     if (this.selectedFace) {
       console.log('Face deselected:', this.selectedFace.name || 'unnamed');
       this.selectedFace = null;
+      this.selectedFaceIndex = null;
+      this.selectedFaceGroup = null;
     }
 
     // Remove selection highlight
@@ -176,28 +351,114 @@ export class FaceSelector {
     }
   }
 
-  createHoverHighlight(face) {
+  createHoverHighlight(face, faceIndex = null) {
     // Check if this is a sketch face
     if (face.userData.sketchFace) {
       // For sketch faces, highlight the edges that form the loop
       this.createSketchEdgeHighlight(face, 0x222222); // Dark color for hover
     } else {
-      // For 3D body faces, use edge geometry
-      const edges = new THREE.EdgesGeometry(face.geometry);
+      // For 3D body faces, highlight only the specific face
+      this.createBodyFaceHighlight(face, faceIndex, 0x222222);
+    }
+  }
+
+  createBodyFaceHighlight(bodyMesh, groupIndex, color) {
+    // Get the unified face group
+    const faceGroups = this.buildFaceGroups(bodyMesh);
+    const group = faceGroups.groups[groupIndex];
+
+    const geometry = bodyMesh.geometry;
+    const position = geometry.attributes.position;
+
+    // Calculate face normal from first triangle
+    const firstFaceIndex = group.faceIndices[0];
+    const i1 = firstFaceIndex * 3;
+    const i2 = firstFaceIndex * 3 + 1;
+    const i3 = firstFaceIndex * 3 + 2;
+
+    const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+    const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+    const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+    const edge1 = new THREE.Vector3().subVectors(v2, v1);
+    const edge2 = new THREE.Vector3().subVectors(v3, v1);
+    const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+    // Don't use offset - instead rely on renderOrder and depthTest to render on top
+    // Collect all unique edges from all triangles in the group
+    const edgeMap = new Map(); // key: "v1_v2", value: count
+
+    const vertexKey = (v) => `${v.x.toFixed(6)}_${v.y.toFixed(6)}_${v.z.toFixed(6)}`;
+
+    group.faceIndices.forEach(faceIndex => {
+      const i1 = faceIndex * 3;
+      const i2 = faceIndex * 3 + 1;
+      const i3 = faceIndex * 3 + 2;
+
+      const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+      const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+      const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+      // Add three edges of this triangle
+      const edges = [
+        [v1, v2],
+        [v2, v3],
+        [v3, v1]
+      ];
+
+      edges.forEach(([va, vb]) => {
+        // Create consistent edge key (sorted)
+        const keyA = vertexKey(va);
+        const keyB = vertexKey(vb);
+        const edgeKey = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+
+        edgeMap.set(edgeKey, (edgeMap.get(edgeKey) || 0) + 1);
+      });
+    });
+
+    // Only draw edges that appear once (perimeter edges)
+    const perimeterEdges = [];
+    const vertexCache = new Map();
+
+    const getVertex = (key) => {
+      if (!vertexCache.has(key)) {
+        const [x, y, z] = key.split('_').map(parseFloat);
+        vertexCache.set(key, new THREE.Vector3(x, y, z));
+      }
+      return vertexCache.get(key);
+    };
+
+    edgeMap.forEach((count, edgeKey) => {
+      if (count === 1) {
+        // This is a perimeter edge
+        const [keyA, keyB] = edgeKey.split('|');
+        perimeterEdges.push([getVertex(keyA), getVertex(keyB)]);
+      }
+    });
+
+    // Create line segments for perimeter (no offset, just render on top)
+    const highlightGroup = new THREE.Group();
+    perimeterEdges.forEach(([v1, v2]) => {
+      const points = [v1, v2];
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const lineMaterial = new THREE.LineBasicMaterial({
-        color: 0x222222, // Very dark gray, almost black
+        color: color,
         linewidth: 3,
         depthTest: false,
+        depthWrite: false,
       });
 
-      this.hoverHighlight = new THREE.LineSegments(edges, lineMaterial);
-      this.hoverHighlight.position.copy(face.position);
-      this.hoverHighlight.rotation.copy(face.rotation);
-      this.hoverHighlight.scale.copy(face.scale);
-      this.hoverHighlight.renderOrder = 999; // Render on top
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      line.renderOrder = 999;
+      highlightGroup.add(line);
+    });
 
-      this.scene.add(this.hoverHighlight);
-    }
+    highlightGroup.position.copy(bodyMesh.position);
+    highlightGroup.rotation.copy(bodyMesh.rotation);
+    highlightGroup.scale.copy(bodyMesh.scale);
+
+    this.hoverHighlight = highlightGroup;
+    this.scene.add(this.hoverHighlight);
   }
 
   createSketchEdgeHighlight(face, color) {
@@ -240,23 +501,68 @@ export class FaceSelector {
     this.scene.add(this.hoverHighlight);
   }
 
-  createSelectionHighlight(face) {
-    // Create blue semi-transparent face overlay
-    const highlightMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4287f5, // Blue (like text selection)
-      transparent: true,
-      opacity: 0.3,
-      side: THREE.DoubleSide,
-      depthTest: false,
-    });
+  createSelectionHighlight(face, faceIndex = null) {
+    if (face.userData.sketchFace) {
+      // For sketch faces, create overlay for the entire face
+      const highlightMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4287f5, // Blue (like text selection)
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        depthTest: false,
+      });
 
-    this.selectionHighlight = new THREE.Mesh(face.geometry.clone(), highlightMaterial);
-    this.selectionHighlight.position.copy(face.position);
-    this.selectionHighlight.rotation.copy(face.rotation);
-    this.selectionHighlight.scale.copy(face.scale);
-    this.selectionHighlight.renderOrder = 998; // Below hover edges
+      this.selectionHighlight = new THREE.Mesh(face.geometry.clone(), highlightMaterial);
+      this.selectionHighlight.position.copy(face.position);
+      this.selectionHighlight.rotation.copy(face.rotation);
+      this.selectionHighlight.scale.copy(face.scale);
+      this.selectionHighlight.renderOrder = 998; // Below hover edges
 
-    this.scene.add(this.selectionHighlight);
+      this.scene.add(this.selectionHighlight);
+    } else {
+      // For 3D body faces, create overlay for all triangles in the unified face group
+      const faceGroups = this.buildFaceGroups(face);
+      const group = faceGroups.groups[faceIndex];
+
+      const geometry = face.geometry;
+      const position = geometry.attributes.position;
+
+      // Collect all vertices from all triangles in the group
+      const allVertices = [];
+      group.faceIndices.forEach(triIndex => {
+        const i1 = triIndex * 3;
+        const i2 = triIndex * 3 + 1;
+        const i3 = triIndex * 3 + 2;
+
+        const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+        const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+        const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+        allVertices.push(v1.x, v1.y, v1.z);
+        allVertices.push(v2.x, v2.y, v2.z);
+        allVertices.push(v3.x, v3.y, v3.z);
+      });
+
+      // Create geometry for all triangles
+      const groupGeometry = new THREE.BufferGeometry();
+      groupGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(allVertices), 3));
+
+      const highlightMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4287f5,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        depthTest: false,
+      });
+
+      this.selectionHighlight = new THREE.Mesh(groupGeometry, highlightMaterial);
+      this.selectionHighlight.position.copy(face.position);
+      this.selectionHighlight.rotation.copy(face.rotation);
+      this.selectionHighlight.scale.copy(face.scale);
+      this.selectionHighlight.renderOrder = 998;
+
+      this.scene.add(this.selectionHighlight);
+    }
   }
 
   onContextMenu(event) {
@@ -274,12 +580,70 @@ export class FaceSelector {
 
     if (intersects.length > 0) {
       const face = intersects[0].object;
+      const faceIndex = intersects[0].faceIndex;
 
-      // Only show context menu for sketch faces that are selected
-      if (face.userData.sketchFace && face === this.selectedFace) {
-        event.preventDefault();
-        this.showContextMenu(face, event.clientX, event.clientY);
+      // For 3D bodies, check if face is front-facing (same logic as onMouseMove)
+      if (!face.userData.sketchFace) {
+        const geometry = face.geometry;
+        const position = geometry.attributes.position;
+
+        const i1 = faceIndex * 3;
+        const i2 = faceIndex * 3 + 1;
+        const i3 = faceIndex * 3 + 2;
+
+        const v1 = new THREE.Vector3(position.getX(i1), position.getY(i1), position.getZ(i1));
+        const v2 = new THREE.Vector3(position.getX(i2), position.getY(i2), position.getZ(i2));
+        const v3 = new THREE.Vector3(position.getX(i3), position.getY(i3), position.getZ(i3));
+
+        const edge1 = new THREE.Vector3().subVectors(v2, v1);
+        const edge2 = new THREE.Vector3().subVectors(v3, v1);
+        const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+        const worldNormal = normal.clone().transformDirection(face.matrixWorld);
+        const faceWorldPos = intersects[0].point;
+        const viewDir = new THREE.Vector3().subVectors(this.camera.position, faceWorldPos).normalize();
+        const dotProduct = worldNormal.dot(viewDir);
+
+        if (dotProduct < 0) {
+          // Face is back-facing, treat as empty space
+          event.preventDefault();
+          this.hideContextMenu();
+          this.deselectFace();
+          return;
+        }
       }
+
+      // For 3D bodies, convert to unified face group
+      let unifiedFaceId = faceIndex;
+      if (!face.userData.sketchFace) {
+        const faceGroups = this.buildFaceGroups(face);
+        unifiedFaceId = faceGroups.faceToGroup.get(faceIndex);
+      }
+
+      // Select the face if not already selected
+      if (face !== this.selectedFace || this.selectedFaceIndex !== unifiedFaceId) {
+        this.selectFace(face, unifiedFaceId);
+      }
+
+      // Close objects browser context menu if it's open
+      if (window.KIVI?.system?.objectsBrowser) {
+        window.KIVI.system.objectsBrowser.hideContextMenu();
+      }
+
+      // Show context menu
+      event.preventDefault();
+      this.showContextMenu(face, event.clientX, event.clientY);
+    } else {
+      // Right-click on empty space - close context menus and deselect
+      event.preventDefault();
+      this.hideContextMenu();
+
+      // Also close objects browser context menu if it's open
+      if (window.KIVI?.system?.objectsBrowser) {
+        window.KIVI.system.objectsBrowser.hideContextMenu();
+      }
+
+      this.deselectFace();
     }
   }
 
@@ -287,11 +651,21 @@ export class FaceSelector {
     // Remove any existing context menu
     this.hideContextMenu();
 
-    // Get the sketch from the face
-    const sketchContainer = face.parent?.parent; // face -> selectionMeshes group -> sketch container
-    if (!sketchContainer?.userData?.kivi?.sketchData) {
-      console.warn('Could not find sketch for face');
-      return;
+    // Determine if this is a sketch face or body face
+    const isSketchFace = face.userData.sketchFace;
+    let targetObject = null;
+
+    if (isSketchFace) {
+      // Get the sketch from the face
+      const sketchContainer = face.parent?.parent; // face -> selectionMeshes group -> sketch container
+      if (!sketchContainer?.userData?.kivi?.sketchData) {
+        console.warn('Could not find sketch for face');
+        return;
+      }
+      targetObject = sketchContainer;
+    } else {
+      // It's a body face
+      targetObject = face;
     }
 
     // Create context menu
@@ -325,9 +699,17 @@ export class FaceSelector {
     });
     extrudeItem.addEventListener('click', () => {
       this.hideContextMenu();
-      // Get the KIVI instance from the scene (assuming it's available globally)
-      if (window.KIVI?.system?.objectsBrowser) {
-        window.KIVI.system.objectsBrowser.showExtrudeDialog(sketchContainer);
+
+      if (isSketchFace) {
+        // Extrude sketch face
+        if (window.KIVI?.system?.objectsBrowser) {
+          window.KIVI.system.objectsBrowser.showExtrudeDialog(targetObject);
+        }
+      } else {
+        // Extrude body face - pass the stored face group directly
+        if (window.KIVI?.system?.objectsBrowser) {
+          window.KIVI.system.objectsBrowser.showExtrudeBodyFaceDialog(targetObject, this.selectedFaceGroup);
+        }
       }
     });
 
