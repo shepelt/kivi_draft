@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Sketch } from './sketch.js';
 import { Plane } from './plane.js';
+import { Extrude } from './extrude.js';
 
 export class SketchEditor {
   constructor(kivi) {
@@ -84,6 +85,11 @@ export class SketchEditor {
 
     this.activeSketch = sketch;
     this.isEditing = true;
+
+    // Disable face selector while editing
+    if (this.kivi.system.faceSelector) {
+      this.kivi.system.faceSelector.enabled = false;
+    }
 
     // Make sure sketch is visible
     this.activeSketch.visible = true;
@@ -424,6 +430,11 @@ export class SketchEditor {
     // Restore camera position
     this.restoreCameraState();
 
+    // Re-enable face selector
+    if (this.kivi.system.faceSelector) {
+      this.kivi.system.faceSelector.enabled = true;
+    }
+
     // Reset state
     this.activeSketch = null;
     this.isEditing = false;
@@ -572,5 +583,64 @@ export class SketchEditor {
     }
 
     return shape;
+  }
+
+  // Extrude a sketch to create a 3D body
+  extrudeSketch(sketch, distance = 5, direction = 1) {
+    if (!sketch || !sketch.userData?.kivi?.sketchData) {
+      console.error('Invalid sketch for extrusion');
+      return null;
+    }
+
+    const sketchData = sketch.userData.kivi.sketchData;
+
+    // Create extrude operation
+    const extrude = new Extrude(sketchData, distance, direction);
+
+    // Generate 3D mesh
+    const mesh = extrude.toMesh();
+    if (!mesh) {
+      console.error('Failed to generate extrude mesh');
+      return null;
+    }
+
+    // Generate unique name for the body
+    const bodyName = this.generateBodyName();
+    mesh.name = bodyName;
+
+    // Store metadata
+    mesh.userData.kivi = {
+      type: 'extrude',
+      sourceSketch: sketch.name,
+      distance: distance,
+      direction: direction
+    };
+
+    // Add to bodies folder
+    this.kivi.objects.bodies.add(mesh);
+
+    // Update objects browser and render
+    this.kivi.system.objectsBrowser.update();
+    this.kivi.render();
+
+    console.log('Extruded sketch:', sketch.name, '→', bodyName, 'distance:', distance);
+
+    return mesh;
+  }
+
+  generateBodyName() {
+    // Generate unique body name
+    const existingNames = new Set(
+      this.kivi.objects.bodies.children.map(child => child.name)
+    );
+
+    let counter = 1;
+    let name = `body_${counter}`;
+    while (existingNames.has(name)) {
+      counter++;
+      name = `body_${counter}`;
+    }
+
+    return name;
   }
 }

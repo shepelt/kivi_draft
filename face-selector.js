@@ -27,6 +27,7 @@ export class FaceSelector {
   setupEventListeners() {
     this.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
     this.domElement.addEventListener('click', (e) => this.onClick(e));
+    this.domElement.addEventListener('contextmenu', (e) => this.onContextMenu(e));
   }
 
   onMouseMove(event) {
@@ -258,8 +259,103 @@ export class FaceSelector {
     this.scene.add(this.selectionHighlight);
   }
 
+  onContextMenu(event) {
+    if (!this.enabled) return;
+
+    // Check if we're right-clicking on a face
+    const rect = this.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(mouse, this.camera);
+    const sketchFaces = this.getSketchFaces();
+    const intersects = this.raycaster.intersectObjects(sketchFaces, false);
+
+    if (intersects.length > 0) {
+      const face = intersects[0].object;
+
+      // Only show context menu for sketch faces that are selected
+      if (face.userData.sketchFace && face === this.selectedFace) {
+        event.preventDefault();
+        this.showContextMenu(face, event.clientX, event.clientY);
+      }
+    }
+  }
+
+  showContextMenu(face, x, y) {
+    // Remove any existing context menu
+    this.hideContextMenu();
+
+    // Get the sketch from the face
+    const sketchContainer = face.parent?.parent; // face -> selectionMeshes group -> sketch container
+    if (!sketchContainer?.userData?.kivi?.sketchData) {
+      console.warn('Could not find sketch for face');
+      return;
+    }
+
+    // Create context menu
+    this.contextMenu = document.createElement('div');
+    this.contextMenu.style.cssText = `
+      position: fixed;
+      left: ${x}px;
+      top: ${y}px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 10000;
+      min-width: 120px;
+    `;
+
+    // Create menu item
+    const extrudeItem = document.createElement('div');
+    extrudeItem.textContent = 'Extrude';
+    extrudeItem.style.cssText = `
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    `;
+
+    extrudeItem.addEventListener('mouseenter', () => {
+      extrudeItem.style.background = '#f0f0f0';
+    });
+    extrudeItem.addEventListener('mouseleave', () => {
+      extrudeItem.style.background = 'transparent';
+    });
+    extrudeItem.addEventListener('click', () => {
+      this.hideContextMenu();
+      // Get the KIVI instance from the scene (assuming it's available globally)
+      if (window.KIVI?.system?.objectsBrowser) {
+        window.KIVI.system.objectsBrowser.showExtrudeDialog(sketchContainer);
+      }
+    });
+
+    this.contextMenu.appendChild(extrudeItem);
+    document.body.appendChild(this.contextMenu);
+
+    // Close menu when clicking elsewhere
+    const closeMenu = (e) => {
+      if (!this.contextMenu?.contains(e.target)) {
+        this.hideContextMenu();
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+    }, 0);
+  }
+
+  hideContextMenu() {
+    if (this.contextMenu) {
+      this.contextMenu.remove();
+      this.contextMenu = null;
+    }
+  }
+
   dispose() {
     this.clearHover();
     this.deselectFace();
+    this.hideContextMenu();
   }
 }

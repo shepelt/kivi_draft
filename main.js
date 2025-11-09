@@ -30,8 +30,8 @@ const camera = new THREE.OrthographicCamera(
   frustumSize * aspect / 2,
   frustumSize / 2,
   frustumSize / -2,
-  0.1,
-  1000
+  -1000,  // Near clipping plane (negative for ortho to see behind camera)
+  1000    // Far clipping plane
 );
 
 // Position camera for orthographic view

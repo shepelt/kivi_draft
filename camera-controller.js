@@ -27,7 +27,7 @@ export class CameraController {
     this.rotateSpeed = 0.005;
 
     // Pan speed
-    this.panSpeed = 0.001;
+    this.panSpeed = 0.0015; // 1.5x faster
 
     // Zoom settings
     this.zoomSpeed = 0.1;
